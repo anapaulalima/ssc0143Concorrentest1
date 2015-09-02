@@ -1,7 +1,7 @@
 #! /bin/bash
 
 # for each matrix file
-for test_file in $(ls -p | grep matriz | grep -v /)
+for test_file in $(ls matrizes/)
 do
 
 
