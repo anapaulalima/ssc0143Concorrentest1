@@ -18,6 +18,7 @@ int threadsRodando;
 int iteracoes;
 int rodarthread;
 double evaluate_j_row_test;
+int numeroThreads;
 
 pthread_mutex_t mutex;
 pthread_cond_t condicional;
@@ -90,7 +91,7 @@ void *fazLinha(void* numero){
 				ant[i] = atual[i];
 
 			pthread_cond_broadcast(&condicional);
-			threadsRodando = min(j_order, sysconf(_SC_NPROCESSORS_ONLN));
+			threadsRodando = numeroThreads;
 		}
 		else{
 			pthread_cond_wait(&condicional, &mutex);
@@ -117,8 +118,6 @@ long jacobiRichardson() {
 	int *indices;
 	//salva o valor da diagonal, pois o mesmo será zerado afim de contas posteriores
 	evaluate_j_row_test = a[j_row_test][j_row_test];
-
-	int numeroThreads = min(j_order, sysconf(_SC_NPROCESSORS_ONLN));
 
 	//vetores de resposta
 	atual = (double *) malloc(sizeof(double) * j_order);
@@ -173,7 +172,7 @@ long jacobiRichardson() {
 }
 
 int main() {
-	double evaluate_j_row_test, resultado_j_row_test;
+	double resultado_j_row_test;
 	long ite = 0;
 
 	int i, j;
@@ -183,6 +182,8 @@ int main() {
 	scanf("%d", &j_row_test);
 	scanf("%lf", &j_error);
 	scanf("%ld", &j_ite_max);
+
+	numeroThreads = min(j_order, sysconf(_SC_NPROCESSORS_ONLN));
 	
 	//leitura da matriz e vetor resposta
 	a = (double **) malloc(sizeof(double *) * j_order);
