@@ -15,6 +15,12 @@ double *ant;
 int **iniFim;
 pthread_t *threadVetor;
 int threadsRodando;
+int iteracoes;
+int rodarthread;
+double evaluate_j_row_test;
+
+pthread_mutex_t mutex;
+pthread_cond_t condicional;
 
 
 void calcIndice(int numeroThreads){
@@ -38,15 +44,60 @@ int min(int a, int b) {
 
 void *fazLinha(void* numero){
 	int i, j, threadAtual = (*((int *) numero));
-	for(i = iniFim[threadAtual][0]; i <= iniFim[threadAtual][1]; i++) {
-		atual[i] = 0;
 
-		for(j = 0; j < j_order; j++) {
-			atual[i] += ant[j] * a[i][j];
+
+	while (rodarthread){
+		for(i = iniFim[threadAtual][0]; i <= iniFim[threadAtual][1]; i++) {
+			atual[i] = 0;
+
+			for(j = 0; j < j_order; j++) {
+				atual[i] += ant[j] * a[i][j];
+			}
+
+			atual[i] += b[i];
 		}
 
-		atual[i] += b[i];
+		pthread_mutex_lock(&mutex);
+		threadsRodando--;
+
+		if (threadsRodando == 0){
+
+			//avaliando
+			double total = 0;
+			double maxErro = 0.0;
+			double maxValor = 0.0;
+			for (i=0; i < j_order; i++){
+				total -= atual[i]*a[j_row_test][i];
+				if (fabs(atual[i]-ant[i])>maxErro){
+					maxErro = fabs(atual[i]-ant[i]);
+				}
+				if (fabs(atual[i])>maxValor){
+					maxValor = fabs(atual[i]);
+				}
+			}
+
+			total += atual[j_row_test];
+			
+			//retorna numero de iteracoes
+			//printf("%lf %lf\n", maxErro, maxValor);
+			if (((maxErro/maxValor) < j_error) || (++iteracoes == j_ite_max-1)){
+				evaluate_j_row_test *= total;
+				rodarthread = 0;
+			}
+
+			//faz anterior receber o atual
+			for(i = 0; i < j_order; i++) 
+				ant[i] = atual[i];
+
+			pthread_cond_broadcast(&condicional);
+			threadsRodando = min(j_order, sysconf(_SC_NPROCESSORS_ONLN));
+		}
+		else{
+			pthread_cond_wait(&condicional, &mutex);
+		}
+		pthread_mutex_unlock(&mutex);
 	}
+
 	return NULL;
 }
 
@@ -61,11 +112,11 @@ Parametros: a - matriz
 Retorno: quantidade de iterações gastas. Caso 0, max iterações atingidas
 Lógica: utiliza a funcao JR para resolver um sistema linear
 */
-long jacobiRichardson(double *evaluate_j_row_test) {
+long jacobiRichardson() {
 	int i, j, l;
 	int *indices;
 	//salva o valor da diagonal, pois o mesmo será zerado afim de contas posteriores
-	(*evaluate_j_row_test) = a[j_row_test][j_row_test];
+	evaluate_j_row_test = a[j_row_test][j_row_test];
 
 	int numeroThreads = min(j_order, sysconf(_SC_NPROCESSORS_ONLN));
 
@@ -98,55 +149,26 @@ long jacobiRichardson(double *evaluate_j_row_test) {
 	
 	threadVetor = (pthread_t *) malloc (sizeof(pthread_t) * numeroThreads);
 
-	//fazendo o JR
-	for(l = 0; l < j_ite_max; l++) {
-		
-		for (i=0; i < numeroThreads; i++){
-			pthread_create (&(threadVetor[i]), NULL, &fazLinha, &indices[i]);
-		}
+	iteracoes = 0;
+	threadsRodando = numeroThreads;
+	rodarthread = 1;
 
-		for (i=0; i < numeroThreads; i++){
-			pthread_join (threadVetor[i], NULL);
-		}
-
-		//avaliando
-		double total = 0;
-		double maxErro = 0.0;
-		double maxValor = 0.0;
-		for (i=0; i < j_order; i++){
-			total -= atual[i]*a[j_row_test][i];
-			if (fabs(atual[i]-ant[i])>maxErro){
-				maxErro = fabs(atual[i]-ant[i]);
-			}
-			if (fabs(atual[i])>maxValor){
-				maxValor = fabs(atual[i]);
-			}
-		}
-
-		total += atual[j_row_test];
-		
-		//retorna numero de iteracoes
-		//printf("%lf %lf\n", maxErro, maxValor);
-		if ((maxErro/maxValor)<j_error){
-			(*evaluate_j_row_test) *= total;
-			return l;
-		}
-
-		//faz anterior receber o atual
-		for(i = 0; i < j_order; i++) 
-			ant[i] = atual[i];
-	}
-	//avaliando
-	double total = 0;
-	for (i=0; i < j_order; i++){
-		total -= atual[i]*a[j_row_test][i];
+	for (i=0; i < numeroThreads; i++){
+		pthread_create (&(threadVetor[i]), NULL, &fazLinha, &indices[i]);
 	}
 
-	total += atual[j_row_test];
-	(*evaluate_j_row_test) *= total;
+	for (i=0; i < numeroThreads; i++){
+		pthread_join (threadVetor[i], NULL);
+	}
+
+	if (iteracoes==j_ite_max-1){
+		return -1;
+	}
+
+	
 
 	//erro
-	return -1;
+	return iteracoes;
 
 }
 
@@ -180,7 +202,7 @@ int main() {
 
 	threadsRodando = 0;
 
-	ite = jacobiRichardson(&evaluate_j_row_test);
+	ite = jacobiRichardson();
 
 	if(ite == -1) //erro
 		printf("Iterations: %ld\n", j_ite_max);
