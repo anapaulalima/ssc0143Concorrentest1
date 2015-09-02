@@ -3,6 +3,32 @@
 #include <math.h>
 #include <sys/sysinfo.h>
 
+int j_order;
+int j_row_test;
+long j_ite_max;
+double j_error;
+double **a;
+double *b;
+double *atual;
+double *ant;
+int **iniFim;
+
+
+void calcIndice(int numeroThreads){
+	int i, tam = floor(j_order/numeroThreads), inicio =0; 
+
+	iniFim = (int **) malloc(sizeof(int *) * numeroThreads);
+	
+	for(i = 0; i < numeroThreads; i++) {
+		iniFim[i] = (int *) malloc(sizeof(int) * 2);
+		iniFim[i][0] = inicio;
+		iniFim[i][1] = inicio+tam-1;
+		inicio += tam;
+	}
+	iniFim[numeroThreads-1][1] = j_order-1;
+
+}
+
 /*Funcao JacobiRichardson
 Parametros: a - matriz
 			b - vetor resposta
@@ -14,14 +40,16 @@ Parametros: a - matriz
 Retorno: quantidade de iterações gastas. Caso 0, max iterações atingidas
 Lógica: utiliza a funcao JR para resolver um sistema linear
 */
-long jacobiRichardson(double **a, double *b, int j_order, double j_error, long j_ite_max, int j_row_test, double *evaluate_j_row_test) {
+long jacobiRichardson(double *evaluate_j_row_test) {
 	int i, j, l;
 	//salva o valor da diagonal, pois o mesmo será zerado afim de contas posteriores
 	(*evaluate_j_row_test) = a[j_row_test][j_row_test];
 
+	int numeroThreads = min(j_order, get_nprocs_conf());
+
 	//vetores de resposta
-	double *atual = (double *) malloc(sizeof(double) * j_order);
-	double *ant = (double *) malloc(sizeof(double) * j_order);
+	atual = (double *) malloc(sizeof(double) * j_order);
+	ant = (double *) malloc(sizeof(double) * j_order);
 	
 	//arrumando a matriz e o vetor, dividindo pela diagonal da matriz
 	for(i = 0; i < j_order; i++) {
@@ -38,8 +66,10 @@ long jacobiRichardson(double **a, double *b, int j_order, double j_error, long j
 		a[i][i] = 0;
 	}
 
-
+	calcIndice(numeroThreads);
 	
+	
+
 	//fazendo o JR
 	for(l = 0; l < j_ite_max; l++) {
 		for(i = 0; i < j_order; i++) {
@@ -94,10 +124,7 @@ long jacobiRichardson(double **a, double *b, int j_order, double j_error, long j
 }
 
 int main() {
-	int j_order;
-	int j_row_test;
-	long j_ite_max;
-	double j_error, evaluate_j_row_test, resultado_j_row_test;
+	double evaluate_j_row_test, resultado_j_row_test;
 	long ite = 0;
 
 	int i, j;
@@ -109,8 +136,8 @@ int main() {
 	scanf("%ld", &j_ite_max);
 	
 	//leitura da matriz e vetor resposta
-	double **a = (double **) malloc(sizeof(double *) * j_order);
-	double *b = (double *) malloc(sizeof(double) * j_order);
+	a = (double **) malloc(sizeof(double *) * j_order);
+	b = (double *) malloc(sizeof(double) * j_order);
 
 	for(i = 0; i < j_order; i++) {
 		a[i] = (double *) malloc(sizeof(double) * j_order);
@@ -124,7 +151,7 @@ int main() {
 	}
 	resultado_j_row_test = b[j_row_test];
 
-	ite = get_nprocs_conf();//jacobiRichardson(a, b, j_order, j_error, j_ite_max, j_row_test, &evaluate_j_row_test);
+	ite = jacobiRichardson(a, b, j_order, j_error, j_ite_max, j_row_test, &evaluate_j_row_test);
 
 	if(ite == -1) //erro
 		printf("Iterations: %ld\n", j_ite_max);
