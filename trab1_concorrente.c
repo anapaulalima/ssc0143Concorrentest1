@@ -171,7 +171,7 @@ long jacobiRichardson() {
 
 }
 
-int main() {
+int main(int argc, char * argv[]) {
 	double resultado_j_row_test;
 	long ite = 0;
 
@@ -183,7 +183,13 @@ int main() {
 	scanf("%lf", &j_error);
 	scanf("%ld", &j_ite_max);
 
-	numeroThreads = min(j_order, sysconf(_SC_NPROCESSORS_ONLN));
+	if (argc < 2){
+
+		numeroThreads = min(j_order, sysconf(_SC_NPROCESSORS_ONLN));
+	}
+	else{
+		numeroThreads = atoi(argv[1]);
+	}
 	
 	//leitura da matriz e vetor resposta
 	a = (double **) malloc(sizeof(double *) * j_order);
