@@ -1,7 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include <sys/sysinfo.h>
+#include <unistd.h>
+#include <pthread.h>
 
 int j_order;
 int j_row_test;
@@ -12,9 +13,12 @@ double *b;
 double *atual;
 double *ant;
 int **iniFim;
+pthread_t *threadVetor;
+int threadsRodando;
 
 
 void calcIndice(int numeroThreads){
+
 	int i, tam = floor(j_order/numeroThreads), inicio =0; 
 
 	iniFim = (int **) malloc(sizeof(int *) * numeroThreads);
@@ -26,7 +30,24 @@ void calcIndice(int numeroThreads){
 		inicio += tam;
 	}
 	iniFim[numeroThreads-1][1] = j_order-1;
+}
 
+int min(int a, int b) { 
+	return a < b ? a : b;
+}
+
+void *fazLinha(void* numero){
+	int i, j, threadAtual = (*((int *) numero));
+	for(i = iniFim[threadAtual][0]; i <= iniFim[threadAtual][1]; i++) {
+		atual[i] = 0;
+
+		for(j = 0; j < j_order; j++) {
+			atual[i] += ant[j] * a[i][j];
+		}
+
+		atual[i] += b[i];
+	}
+	return NULL;
 }
 
 /*Funcao JacobiRichardson
@@ -42,10 +63,11 @@ Lógica: utiliza a funcao JR para resolver um sistema linear
 */
 long jacobiRichardson(double *evaluate_j_row_test) {
 	int i, j, l;
+	int *indices;
 	//salva o valor da diagonal, pois o mesmo será zerado afim de contas posteriores
 	(*evaluate_j_row_test) = a[j_row_test][j_row_test];
 
-	int numeroThreads = min(j_order, get_nprocs_conf());
+	int numeroThreads = min(j_order, sysconf(_SC_NPROCESSORS_ONLN));
 
 	//vetores de resposta
 	atual = (double *) malloc(sizeof(double) * j_order);
@@ -67,19 +89,24 @@ long jacobiRichardson(double *evaluate_j_row_test) {
 	}
 
 	calcIndice(numeroThreads);
+
+	indices = (int *) malloc (sizeof(int)*numeroThreads);
+
+	for (i=0; i<numeroThreads; i++){
+		indices[i] = i;
+	}
 	
-	
+	threadVetor = (pthread_t *) malloc (sizeof(pthread_t) * numeroThreads);
 
 	//fazendo o JR
 	for(l = 0; l < j_ite_max; l++) {
-		for(i = 0; i < j_order; i++) {
-			atual[i] = 0;
+		
+		for (i=0; i < numeroThreads; i++){
+			pthread_create (&(threadVetor[i]), NULL, &fazLinha, &indices[i]);
+		}
 
-			for(j = 0; j < j_order; j++) {
-				atual[i] += ant[j] * a[i][j];
-			}
-
-			atual[i] += b[i];
+		for (i=0; i < numeroThreads; i++){
+			pthread_join (threadVetor[i], NULL);
 		}
 
 		//avaliando
@@ -151,13 +178,15 @@ int main() {
 	}
 	resultado_j_row_test = b[j_row_test];
 
-	ite = jacobiRichardson(a, b, j_order, j_error, j_ite_max, j_row_test, &evaluate_j_row_test);
+	threadsRodando = 0;
+
+	ite = jacobiRichardson(&evaluate_j_row_test);
 
 	if(ite == -1) //erro
 		printf("Iterations: %ld\n", j_ite_max);
 	else
 		printf("Iterations: %ld\n", ite);
-	printf("RowTest: %d => [%lf] =? %lf", j_row_test, evaluate_j_row_test, resultado_j_row_test);
+	printf("RowTest: %d => [%lf] =? %lf\n", j_row_test, evaluate_j_row_test, resultado_j_row_test);
 
 	return 0;
 }
